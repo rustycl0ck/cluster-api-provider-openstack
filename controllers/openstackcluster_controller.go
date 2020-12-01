@@ -157,17 +157,19 @@ func (r *OpenStackClusterReconciler) reconcileDelete(ctx context.Context, log lo
 	}
 
 	if openStackCluster.Spec.ManagedAPIServerLoadBalancer {
-		if apiLb := openStackCluster.Status.Network.APIServerLoadBalancer; apiLb != nil {
-			if err = loadBalancerService.DeleteLoadBalancer(apiLb.Name, openStackCluster); err != nil {
-				return reconcile.Result{}, errors.Errorf("failed to delete load balancer: %v", err)
-			}
-			r.Recorder.Eventf(openStackCluster, corev1.EventTypeNormal, "SuccessfulDeleteLoadBalancer", "Deleted load balancer %s with id %s", apiLb.Name, apiLb.ID)
-
-			if openStackCluster.Spec.APIServerFloatingIP == "" {
-				if err = networkingService.DeleteFloatingIP(apiLb.IP); err != nil {
-					return reconcile.Result{}, errors.Errorf("failed to delete floating IP: %v", err)
+		if openStackCluster.Status.Network != nil {
+			if apiLb := openStackCluster.Status.Network.APIServerLoadBalancer; apiLb != nil {
+				if err = loadBalancerService.DeleteLoadBalancer(apiLb.Name, openStackCluster); err != nil {
+					return reconcile.Result{}, errors.Errorf("failed to delete load balancer: %v", err)
 				}
-				r.Recorder.Eventf(openStackCluster, corev1.EventTypeNormal, "SuccessfulDeleteFloatingIP", "Deleted floating IP %s", apiLb.IP)
+				r.Recorder.Eventf(openStackCluster, corev1.EventTypeNormal, "SuccessfulDeleteLoadBalancer", "Deleted load balancer %s with id %s", apiLb.Name, apiLb.ID)
+
+				if openStackCluster.Spec.APIServerFloatingIP == "" {
+					if err = networkingService.DeleteFloatingIP(apiLb.IP); err != nil {
+						return reconcile.Result{}, errors.Errorf("failed to delete floating IP: %v", err)
+					}
+					r.Recorder.Eventf(openStackCluster, corev1.EventTypeNormal, "SuccessfulDeleteFloatingIP", "Deleted floating IP %s", apiLb.IP)
+				}
 			}
 		}
 	}
@@ -189,13 +191,15 @@ func (r *OpenStackClusterReconciler) reconcileDelete(ctx context.Context, log lo
 		r.Recorder.Eventf(openStackCluster, corev1.EventTypeNormal, "SuccessfulDeleteSecurityGroup", "Deleted security group %s with id %s", controlPlaneSecGroup.Name, controlPlaneSecGroup.ID)
 	}
 
-	if router := openStackCluster.Status.Network.Router; router != nil {
-		log.Info("Deleting router", "name", router.Name)
-		if err = networkingService.DeleteRouter(openStackCluster.Status.Network); err != nil {
-			return ctrl.Result{}, errors.Errorf("failed to delete router: %v", err)
+	if openStackCluster.Status.Network != nil {
+		if router := openStackCluster.Status.Network.Router; router != nil {
+			log.Info("Deleting router", "name", router.Name)
+			if err = networkingService.DeleteRouter(openStackCluster.Status.Network); err != nil {
+				return ctrl.Result{}, errors.Errorf("failed to delete router: %v", err)
+			}
+			r.Recorder.Eventf(openStackCluster, corev1.EventTypeNormal, "SuccessfulDeleteRouter", "Deleted router %s with id %s", router.Name, router.ID)
+			log.Info("OpenStack router deleted successfully")
 		}
-		r.Recorder.Eventf(openStackCluster, corev1.EventTypeNormal, "SuccessfulDeleteRouter", "Deleted router %s with id %s", router.Name, router.ID)
-		log.Info("OpenStack router deleted successfully")
 	}
 
 	// if NodeCIDR was not set, no network was created.
